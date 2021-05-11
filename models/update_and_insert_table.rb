@@ -27,24 +27,22 @@ class UpdateAndInsertTable < Table
     # max_updated_key in both databases. If everything is normal then count of destination.updated_key will be >= count of
     # source.updated_key. Therefore if count destination.updated_key < count source.updated_key we assume that data has time
     # travelled and rewind the max_updated_key
-    if time_travel_scan_back_period
-      sql = "SELECT COUNT(*) as count FROM #{destination_name}
-             WHERE #{updated_key} >= '#{max_updated_key - time_travel_scan_back_period}'
-             AND #{updated_key} < '#{max_updated_key}'"
-      destination_count = destination_connection.execute(sql).first['count'].to_i
+    return unless time_travel_scan_back_period
 
-      sql = "SELECT COUNT(*) as count FROM #{source_name}
-             WHERE #{updated_key} >= '#{max_updated_key - time_travel_scan_back_period}'
-             AND #{updated_key} < '#{max_updated_key}'"
-      source_count = source_connection.execute(sql).first['count'].to_i
+    sql = "SELECT COUNT(*) as count FROM #{destination_name}
+            WHERE #{updated_key} >= '#{max_updated_key - time_travel_scan_back_period}'
+            AND #{updated_key} < '#{max_updated_key}'"
+    destination_count = destination_connection.execute(sql).first['count'].to_i
 
-      if source_count > destination_count
-        update_attribute(:reset_updated_key, max_updated_key - time_travel_scan_back_period)
-      end
-    end
+    sql = "SELECT COUNT(*) as count FROM #{source_name}
+            WHERE #{updated_key} >= '#{max_updated_key - time_travel_scan_back_period}'
+            AND #{updated_key} < '#{max_updated_key}'"
+    source_count = source_connection.execute(sql).first['count'].to_i
+
+    update_attribute(:reset_updated_key, max_updated_key - time_travel_scan_back_period) if source_count > destination_count
   end
 
-  def update_max_values(table_name = self.destination_name)
+  def update_max_values(table_name = destination_name)
     # Why are we selecting the max primary_key only considering those records that happen to have the max updated_key?
     # Because we need to ensure that when selecting new rows we'll pickup rows that have the *same* updated_key and a
     # higher primary_key, *not just* those that have a higher updated_key.
@@ -70,8 +68,8 @@ class UpdateAndInsertTable < Table
 
     logger.info "max_primary_key is now #{x['max_primary_key']} and max_updated_key is now #{x['max_updated_key']} for #{source_name}"
     update_attributes({
-        max_primary_key: x['max_primary_key'].to_i,
-        max_updated_key: x['max_updated_key']
-        })
+                        max_primary_key: x['max_primary_key'].to_i,
+                        max_updated_key: x['max_updated_key']
+                      })
   end
 end
